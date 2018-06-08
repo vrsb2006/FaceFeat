@@ -1,3 +1,3 @@
 # FaceFeat
 
-This directory contains some static results.
+This directory contains some results on images.
