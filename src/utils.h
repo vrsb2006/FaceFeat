@@ -62,6 +62,8 @@ cv::Rect get_bbox(cv::Mat &shp);
 
 Mat correctGamma(Mat& img, float gamma);
 
+void read_mat(std::istream &i, Mat &m);
+ 
 void live();
 
 void test_images(std::string path);

@@ -152,27 +152,30 @@ Mat correctGamma(Mat& img, float gamma) {
 	return result;
 }
 
+void read_mat(std::istream &i, Mat &m) {
+    int t,r,c;
+    i.read((char*)&t,sizeof(int));
+    i.read((char*)&c,sizeof(int));
+    i.read((char*)&r,sizeof(int));
+    m.create(r,c,t);
+    i.read((char*)m.data, m.total() * m.elemSize());
+}
+
 void live() {
 	// load the trained detection model
 	std::vector<cv::Mat> Ws;
-	for (int i = 1; i <= 5; ++i) {
-		char name1[10], name2[10];
-		sprintf(name1, "Ws%d.yml", i);
-		cv::FileStorage Fs(name1, FileStorage::READ);
-		sprintf(name2, "Ws%d", i);
-		cv::Mat temp;
-		Fs[name2] >> temp;
-		Ws.push_back(temp);
-		temp.release();
-		Fs.release();
-	}
 	
 	// load mean shape
 	cv::Mat mean_shape;
-	cv::FileStorage Fs("mean_shape_org.yml", FileStorage::READ);
-	Fs["mean_shape"] >> mean_shape;
-	Fs.release();
-	mean_shape.convertTo(mean_shape, CV_32FC1);
+	
+	std::ifstream in("ws.data", std::ios_base::binary);
+	for (int i = 1; i <= 5; ++i) {
+		Mat temp;
+		read_mat(in, temp);
+		Ws.push_back(temp);
+	}
+	read_mat(in, mean_shape);
+	in.close();
 
 	// detect the face
 	if (!face_cascade.load(face_cascade_name)) { cout << "error loading the cascade classifier" << endl; }
