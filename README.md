@@ -9,3 +9,6 @@
 
 ## Databases Used for Training:
 * This model is trained on 68-points annotations provided by ibug on databases AFW, HELEN, IBUG and LFPW. 
+
+## Youtube video link:
+* https://www.youtube.com/watch?v=wLUJi2oGDck
