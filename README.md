@@ -6,3 +6,6 @@
 ## Reference: 
 * [1] "Supervised Descent Method and its Applications to Face Alignment", Xuehan Xiong, Fernando De la Torre
 * [2] "Incremental Face Alignment in the Wild", Akshay Asthana, Stefanos Zafeiriou, Shiyang Cheng, Maja Pantic
+
+## Databases Used for Training:
+* This model is trained on 68-points annotations provided by ibug on databases AFW, HELEN, IBUG and LFPW. 
