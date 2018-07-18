@@ -28,11 +28,7 @@ SOFTWARE. */
 // other useful include directories
 #include<fstream>
 #include<tuple>
-#include<omp.h>
-
-// value of pi and epsilon
-#define PI 3.14159265
-//#define write_video
+#include<Windows.h>
 
 using namespace cv;
 using namespace std;
@@ -48,22 +44,17 @@ struct img_data {
 	std::vector<cv::Mat> shape_diff;
 };
 
+// Vector of image data structure
 extern std::vector<img_data> Tr_Data, Data;  
 
-cv::Mat ProjectShape(const cv::Mat &shape, const cv::Rect &bounding_box);
+// Calculating HOG features for given shape
+void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize);
 
-cv::Mat ReProjectShape(const cv::Mat &shape, const cv::Rect &bounding_box);
-
-void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize, cv::Rect bbox);
-
+// Reset a shape onto bounding box
 cv::Mat resetshape(const cv::Mat &shp, cv::Rect box);
 
-cv::Rect get_bbox(cv::Mat &shp);
-
-Mat correctGamma(Mat& img, float gamma);
-
-void read_mat(std::istream &i, Mat &m);
+// Read model file
+void readModel(std::istream &i, Mat &m);
  
+// Results on live video (or camera)
 void live();
-
-void test_images(std::string path);

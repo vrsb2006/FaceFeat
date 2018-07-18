@@ -31,44 +31,15 @@ float err = 0;
 
 std::vector<img_data> Tr_Data, Data;
 
-cv::Mat ProjectShape(const cv::Mat &shape, const cv::Rect &bounding_box) {
-	cv::Mat temp(shape.rows, 2, CV_32FC1);
-	for (int j = 0; j < shape.rows; j++) {
-		temp.at<float>(j, 0) = (shape.at<float>(j, 0) - (bounding_box.x + bounding_box.width / 2.0)) / (bounding_box.width / 2.0);		
-		temp.at<float>(j, 1) = (shape.at<float>(j, 1) - (bounding_box.y + bounding_box.height / 2.0)) / (bounding_box.height / 2.0);
-	}
-	return temp;
-}
+void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize) {
 
-cv::Mat ReProjectShape(const cv::Mat &shape, const cv::Rect &bounding_box) {
-	cv::Mat temp(shape.rows, 2, CV_32FC1);
-	for (int j = 0; j < shape.rows; j++) {
-		temp.at<float>(j, 0) = (shape.at<float>(j, 0) * bounding_box.width / 2.0) + (bounding_box.x + bounding_box.width / 2.0);
-		temp.at<float>(j, 1) = (shape.at<float>(j, 1) * bounding_box.height / 2.0) + (bounding_box.y + bounding_box.height / 2.0);
-	}
-	return temp;
-}
-
-void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize, cv::Rect bbox) {
-
-	// resize image such that face is approx 300 x 300
-	float scale = 300 / (float)bbox.width;
-	cv::Mat img_temp;
-	cv::resize(img_inp, img_temp, cv::Size((int)(scale*img_inp.cols), (int)(scale*img_inp.rows)));
-
-	// resize shape
-	shp *= scale;
-	
-	// to avoid error due to descriptor calculations at borders
+	// Add border for descritpor calculation at borders
 	int border = (int)(winsize / 2);
 	cv::Mat img;
-	img = img_temp.clone();
-
+	img = img_inp.clone();
 	copyMakeBorder(img, img, border, border, border, border, BORDER_REPLICATE);
-
-	cv::Mat descriptor = cv::Mat::zeros(1, 128 * shp.cols, CV_32FC1);
-
-#pragma omp parallel for
+		
+	cv::Mat descriptor = cv::Mat::zeros(1, 128 * shp.cols, CV_32FC1);	
 	for (int i = 0; i < shp.cols; ++i) {		
 		cv::Rect ROI;
 		cv::Mat patch;
@@ -76,8 +47,9 @@ void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize, cv::Rect
 		vector<Point> locations;
 		int iter = 128 * i;
 
-		if (shp.at<float>(0, i) < 0 || shp.at<float>(0, i) >= img_temp.cols ||
-			shp.at<float>(1, i) < 0 || shp.at<float>(1, i) >= img_temp.rows) {
+		// If a shape point is out of image, return descriptor containing all zeros
+		if (shp.at<float>(0, i) < 0 || shp.at<float>(0, i) >= img_inp.cols ||
+			shp.at<float>(1, i) < 0 || shp.at<float>(1, i) >= img_inp.rows) {
 			for (int j = 0; j < 128; ++j) {
 				descriptor.at<float>(0, iter + j) = 0;
 			}
@@ -101,80 +73,38 @@ void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize, cv::Rect
 cv::Mat resetshape(const cv::Mat &shp, cv::Rect box) {
 	cv::Mat out;
 	out = shp.clone();
-		
-	for (size_t i = 0; i < shp.rows; ++i) {		
+
+	for (size_t i = 0; i < shp.rows; ++i) {
 		out.at<float>(i, 0) = (out.at<float>(i, 0))*(box.width);
 		out.at<float>(i, 1) = (out.at<float>(i, 1))*(box.height);
 
 		out.at<float>(i, 0) = out.at<float>(i, 0) + (box.x);
-		out.at<float>(i, 1) = out.at<float>(i, 1) + (box.y) + (box.height) / 5.0;		
+		out.at<float>(i, 1) = out.at<float>(i, 1) + (box.y) + (box.height) / 5.0;
 	}
 
 	return out;
 }
 
-cv::Rect get_bbox(cv::Mat &shp) {
-	float min0 = 10000, min1 = 10000, max0 = 0, max1 = 0;
-
-	for (size_t i = 0; i < shp.rows; ++i) {
-		if (shp.at<float>(i, 0) <= min0) {
-			min0 = shp.at<float>(i, 0);
-		}
-		if (shp.at<float>(i, 0) >= max0) {
-			max0 = shp.at<float>(i, 0);
-		}
-		if (shp.at<float>(i, 1) <= min1) {
-			min1 = shp.at<float>(i, 1);
-		}
-		if (shp.at<float>(i, 1) >= max1) {
-			max1 = shp.at<float>(i, 1);
-		}
-	}
-
-	cv::Rect out;
-	out.x = min0; out.y = min1;
-	out.width = max0 - min0 + 1;
-	out.height = max1 - min1 + 1;
-	return out;
-}
-
-Mat correctGamma(Mat& img, float gamma) {
-	float inverse_gamma = 1.0 / gamma;
-
-	Mat lut_matrix(1, 256, CV_8UC1);
-	uchar * ptr = lut_matrix.ptr();
-	for (int i = 0; i < 256; i++)
-		ptr[i] = (int)(pow((float)i / 255.0, inverse_gamma) * 255.0);
-
-	Mat result;
-	LUT(img, lut_matrix, result);
-
-	return result;
-}
-
-void read_mat(std::istream &i, Mat &m) {
-    int t,r,c;
-    i.read((char*)&t,sizeof(int));
-    i.read((char*)&c,sizeof(int));
-    i.read((char*)&r,sizeof(int));
-    m.create(r,c,t);
-    i.read((char*)m.data, m.total() * m.elemSize());
+void readModel(std::istream &i, Mat &m) {
+	int t, r, c;
+	i.read((char*)&t, sizeof(int));
+	i.read((char*)&c, sizeof(int));
+	i.read((char*)&r, sizeof(int));
+	m.create(r, c, t);
+	i.read((char*)m.data, m.total() * m.elemSize());
 }
 
 void live() {
 	// load the trained detection model
 	std::vector<cv::Mat> Ws;
-	
-	// load mean shape
 	cv::Mat mean_shape;
-	
 	std::ifstream in("ws.data", std::ios_base::binary);
 	for (int i = 1; i <= 5; ++i) {
 		Mat temp;
-		read_mat(in, temp);
+		readModel(in, temp);
 		Ws.push_back(temp);
 	}
-	read_mat(in, mean_shape);
+	readModel(in, mean_shape);
 	in.close();
 
 	// detect the face
@@ -182,164 +112,95 @@ void live() {
 
 	// live
 	cv::VideoCapture camera;
-	camera.open("vid.avi");	
+	camera.open("vid.avi");
+	//camera.open(0);             // Uncomment for webcamera
 	Mat I, img;
-	cv::Mat init_shape_org = cv::Mat::zeros(num_used_pts, 2, CV_32FC1);		cv::Mat one_mat = cv::Mat::ones(1, 1, CV_32FC1);
+	cv::Mat init_shape_org = cv::Mat::zeros(num_used_pts, 2, CV_32FC1);		
+	cv::Mat one_mat = cv::Mat::ones(1, 1, CV_32FC1);
 
-	
-#ifdef write_video
-	VideoWriter outputVideo;                                       	
-	outputVideo.open("output.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 30, cv::Size(780, 580), true);
+	LARGE_INTEGER start1, end1, freq1;
+	QueryPerformanceFrequency(&freq1);
 
-	if (!outputVideo.isOpened())
-	{
-		cout << "Could not open the output video for write: " << endl;
-		return;
-	}
-#endif
-	bool write = false;
+	int frate1;	
+	float scale;
+	cv::Mat features, feat;
+	int width, height;
 	while (1) {
-		camera >> I;				
+		// Grab a frame from camera stream
+		camera >> I;
 		if (I.empty()) {
 			break;
 		}
-		//I = correctGamma(I, 1.2);
-		cv::flip(I, I, 1);				
+
+		// Convert to gray image
 		cv::cvtColor(I, img, CV_BGR2GRAY);
-
-		std::vector<cv::Rect> faces;
-		face_cascade.detectMultiScale(img, faces, 1.2, 2, 0, cv::Size(100, 100));
-
-		if (!faces.empty()) {
-			// reset the mean shape onto the bounding box returned by the face detector
-			cv::Mat init_shape = cv::Mat(68, 2, CV_32FC1);
-			cv::Mat mn_shape = mean_shape.clone();
-			init_shape = resetshape(mn_shape, faces[0]);
-
-			int count = 0;
-			for (int j = 0; j < init_shape.rows; ++j) {
-				init_shape_org.at<float>(j, 0) = init_shape.at<float>(j, 0);// - 0.240297;
-				init_shape_org.at<float>(j, 1) = init_shape.at<float>(j, 1);// - 1.97803;					
-			}
-
-			//Main loop for calculations
-			for (int i = 0; i < 5; ++i) {
-				cv::Mat features, feat;
-				cv::Mat init_temp = init_shape_org.t();
-				featHOG(img, init_temp, features, 32, faces[0]);
-				cv::hconcat(one_mat, features, feat);
-
-				cv::Mat deltashapes_bar = feat*Ws[i];
-				cv::Mat deltashapes_bar_xy = deltashapes_bar.reshape(0, num_used_pts);
-
-				init_shape_org = ProjectShape(init_shape_org, faces[0]) + deltashapes_bar_xy;
-				init_shape_org = ReProjectShape(init_shape_org, faces[0]);
-			}
-			//cv::rectangle(I, faces[0], cv::Scalar(0, 255, 0), 1, 8, 0);
-			for (size_t j = 0; j < init_shape_org.rows; ++j) {
-				cv::circle(I, cv::Point(init_shape_org.at<float>(j, 0), init_shape_org.at<float>(j, 1)), 2, cv::Scalar(0, 255, 0), -1, 8, 0);				
-			}
-		}
-#ifdef write_video
-		if (write) {
-			outputVideo << I;
-		}
-#endif		
-		imshow("Image", I);
-		char c = cv::waitKey(5);
-		if ((char)c == 27) { break; }
-		if ((char)c == 's') { write = true; }
-	}
-#ifdef write_video
-	outputVideo.release();
-#endif
-}
-
-void test_images(std::string path) {
-
-	// Read images
-	ifstream fin;
-	fin.open(path);
-	std::string input_name;
-	cv::Mat img_temp;
-	std::vector<cv::Mat> images;
-	while (getline(fin, input_name)) {
-		img_temp = imread(input_name);
-		images.push_back(img_temp);
-	}
-	fin.close();
-
-	// load the trained detection model
-	std::vector<cv::Mat> Ws;
-	for (int i = 1; i <= 5; ++i) {
-		char name1[10], name2[10];
-		sprintf(name1, "Ws%d.yml", i);
-		cv::FileStorage Fs(name1, FileStorage::READ);
-		sprintf(name2, "Ws%d", i);
-		cv::Mat temp;
-		Fs[name2] >> temp;
-		Ws.push_back(temp);
-		temp.release();
-		Fs.release();
-	}
-
-	// load mean shape
-	cv::Mat mean_shape;
-	cv::FileStorage Fs("mean_shape_org.yml", FileStorage::READ);
-	Fs["mean_shape"] >> mean_shape;
-	Fs.release();
-	mean_shape.convertTo(mean_shape, CV_32FC1);
-
-	// detect the face
-	if (!face_cascade.load(face_cascade_name)) { cout << "error loading the cascade classifier" << endl; }
-
-	// test on images	
-	Mat I, img;
-	cv::Mat init_shape_org = cv::Mat::zeros(num_used_pts, 2, CV_32FC1);		cv::Mat one_mat = cv::Mat::ones(1, 1, CV_32FC1);
-	for (size_t iter = 0; iter < images.size();++iter) {
-		cout << iter << endl;
+		width = img.cols; height = img.rows;
 		
-		I = images[iter].clone();
-		//I = correctGamma(I, 1.2);
-		cv::flip(I, I, 1);
-		cv::cvtColor(I, img, CV_BGR2GRAY);
+		// For measuring time 
+		QueryPerformanceCounter(&start1);
 
+		// Detect faces
 		std::vector<cv::Rect> faces;
-		face_cascade.detectMultiScale(img, faces, 1.2, 2, 0, cv::Size(50, 50));
-
+		face_cascade.detectMultiScale(img, faces, 1.2, 2, 0, cv::Size(100, 100));		
+		
 		if (!faces.empty()) {
-			// reset the mean shape onto the bounding box returned by the face detector
-			cv::Mat init_shape = cv::Mat(68, 2, CV_32FC1);
-			cv::Mat mn_shape = mean_shape.clone();
-			init_shape = resetshape(mn_shape, faces[0]);
+			// Resize the image such that face size is 300 x 300			
+			scale = 300 / (float)faces[0].width;
+			cv::resize(img, img, cv::Size((int)(scale*width), (int)(scale*height)));
 
-			int count = 0;
-			for (int j = 0; j < init_shape.rows; ++j) {
-				init_shape_org.at<float>(j, 0) = init_shape.at<float>(j, 0);// - 0.240297;
-				init_shape_org.at<float>(j, 1) = init_shape.at<float>(j, 1);// - 1.97803;					
+			// reset the mean shape onto the bounding box returned by the face detector
+			cv::Mat init_shape = cv::Mat(68, 2, CV_32FC1);			
+			init_shape = resetshape(mean_shape, faces[0]);
+
+			// Project shape between 0 and 1
+			for (int j = 0; j < init_shape.rows; j++) {
+				init_shape.at<float>(j, 0) = (init_shape.at<float>(j, 0) - (faces[0].x)) / (faces[0].width);
+				init_shape.at<float>(j, 1) = (init_shape.at<float>(j, 1) - (faces[0].y)) / (faces[0].height);
 			}
+
+			// Reset projected shape to the mean of previously known distribution
+			for (int j = 0; j < init_shape.rows; ++j) {
+				init_shape_org.at<float>(j, 0) = (init_shape.at<float>(j, 0) + 0.00792179) * faces[0].width + faces[0].x;
+				init_shape_org.at<float>(j, 1) = (init_shape.at<float>(j, 1) - 0.0369028) * faces[0].height + faces[0].y;
+			}
+
+			// Resize the shape such that face size is 300 x 300				
+			init_shape_org *= scale;
 
 			//Main loop for calculations
-			for (int i = 0; i < 5; ++i) {
-				cv::Mat features, feat;
+			for (int i = 0; i < 5; ++i) {				
 				cv::Mat init_temp = init_shape_org.t();
-				featHOG(img, init_temp, features, 32, faces[0]);
+
+				// Calculate HOG features
+				featHOG(img, init_temp, features, 32);
+
+				// Concatenate with a column of ones (accounts for intercept in regression framework)
 				cv::hconcat(one_mat, features, feat);
 
-				cv::Mat deltashapes_bar = feat*Ws[i];
-				cv::Mat deltashapes_bar_xy = deltashapes_bar.reshape(0, num_used_pts);
+				// Multiply by learned model
+				cv::Mat deltashapes_bar = feat*Ws[i];				
 
-				init_shape_org = ProjectShape(init_shape_org, faces[0]) + deltashapes_bar_xy;
-				init_shape_org = ReProjectShape(init_shape_org, faces[0]);
+				// Update the shape
+				init_shape_org += deltashapes_bar.reshape(0, num_used_pts);				
 			}
-			cv::rectangle(I, faces[0], cv::Scalar(0, 255, 0), 1, 8, 0);
+
+			// Resize shape to original resolution
+			init_shape_org /= scale;
+
+			QueryPerformanceCounter(&end1);
+			frate1 = (end1.QuadPart - start1.QuadPart) * 1000 / freq1.QuadPart;
+			cout << "Program is running at " << (1000 / frate1) << " fps" << endl;
+
+			// Plot the facial features
 			for (size_t j = 0; j < init_shape_org.rows; ++j) {
-				cv::circle(I, cv::Point(init_shape_org.at<float>(j, 0), init_shape_org.at<float>(j, 1)), 2, cv::Scalar(0, 255, 0), -1, 8, 0);				
+				cv::circle(I, cv::Point(init_shape_org.at<float>(j, 0), init_shape_org.at<float>(j, 1)), 2, cv::Scalar(10, 255, 10), -1, 8, 0);
 			}
 		}
-		//imwrite("output/" + std::to_string(iter) + ".jpg", I);
-		imshow("Image", I);		
-		char c = cv::waitKey(0);
+		cv::flip(I, I, 1);
+		imshow("Image_c", I);
+		char c = cv::waitKey(1);
 		if ((char)c == 27) { break; }
 	}
 }
+
+
