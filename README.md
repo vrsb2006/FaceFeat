@@ -1,11 +1,9 @@
 # FaceFeat
 ## Facial Feature Detection using Sequential Cascade of Linear Regressors
 ![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/FaceFeat.gif)
-![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/5.png)
 
 ## Cumulative Error Distribution Curves (ibug 300w indoor and outdoor images)
-![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_68.png)
-![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_49.png)
+![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_68.png)![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_49.png)
 
 ## Databases Used for Training:
 * This model is trained on 68-points annotations provided by ibug on databases AFW, HELEN, IBUG and LFPW. 
