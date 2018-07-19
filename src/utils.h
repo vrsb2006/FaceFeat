@@ -33,19 +33,10 @@ SOFTWARE. */
 using namespace cv;
 using namespace std;
 
+//#define write_video
+
 extern int num_used_pts;
 extern float err;
-
-struct img_data {
-	cv::Mat img;
-	cv::Rect bbox;
-	cv::Mat shape, shape_org;
-	std::vector<cv::Mat> init_shape;
-	std::vector<cv::Mat> shape_diff;
-};
-
-// Vector of image data structure
-extern std::vector<img_data> Tr_Data, Data;  
 
 // Calculating HOG features for given shape
 void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize);
@@ -53,8 +44,14 @@ void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize);
 // Reset a shape onto bounding box
 cv::Mat resetshape(const cv::Mat &shp, cv::Rect box);
 
-// Read model file
+// Bounding box from a given shape
+cv::Rect get_bbox(cv::Mat &shp);
+
+// Read model files
 void readModel(std::istream &i, Mat &m);
  
 // Results on live video (or camera)
 void live();
+
+// Result on images
+void test_images(std::string path);
