@@ -3,7 +3,7 @@
 ![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/FaceFeat.gif)
 
 ## Cumulative Error Distribution Curves (ibug 300w indoor and outdoor images)
-![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_68.png)![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED_49.png)
+![alt text](https://github.com/vrsb2006/FaceFeat/blob/master/Results/CED.png)
 
 ## Databases Used for Training:
 * This model is trained on 68-points annotations provided by ibug on databases AFW, HELEN, IBUG and LFPW. 
