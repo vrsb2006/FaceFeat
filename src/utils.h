@@ -38,6 +38,12 @@ using namespace std;
 extern int num_used_pts;
 extern float err;
 
+// Get camera matrix
+cv::Mat get_camera_matrix(float focal_length, cv::Point2d center);
+
+// Get 3d model points
+std::vector<cv::Point3d> get_3D_model_points(void);
+
 // Calculating HOG features for given shape
 void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize);
 

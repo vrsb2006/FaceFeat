@@ -29,6 +29,31 @@ cv::Mat data_mean_shape;
 int num_used_pts = 68;
 float err = 0;
 
+// Camera matrix, given focal length and optical center
+cv::Mat get_camera_matrix(float focal_length, cv::Point2d center) {
+	cv::Mat camera_matrix = (cv::Mat_<double>(3, 3) << focal_length, 0, center.x, 0, focal_length, center.y, 0, 0, 1);
+	return camera_matrix;
+}
+
+// 3D model points(world coordinates), http://aifi.isr.uc.pt/Downloads/OpenGL/glAnthropometric3DModel.cpp
+std::vector<cv::Point3d> get_3D_model_points(void) {
+	std::vector<cv::Point3d> object_pts;
+	object_pts.push_back(cv::Point3d(6.825897, 6.760612, 4.402142));     //#33 left brow left corner
+	object_pts.push_back(cv::Point3d(1.330353, 7.122144, 6.903745));     //#29 left brow right corner
+	object_pts.push_back(cv::Point3d(-1.330353, 7.122144, 6.903745));    //#34 right brow left corner
+	object_pts.push_back(cv::Point3d(-6.825897, 6.760612, 4.402142));    //#38 right brow right corner
+	object_pts.push_back(cv::Point3d(5.311432, 5.485328, 3.987654));     //#13 left eye left corner
+	object_pts.push_back(cv::Point3d(1.789930, 5.393625, 4.413414));     //#17 left eye right corner
+	object_pts.push_back(cv::Point3d(-1.789930, 5.393625, 4.413414));    //#25 right eye left corner
+	object_pts.push_back(cv::Point3d(-5.311432, 5.485328, 3.987654));    //#21 right eye right corner
+	object_pts.push_back(cv::Point3d(2.005628, 1.409845, 6.165652));     //#55 nose left corner
+	object_pts.push_back(cv::Point3d(-2.005628, 1.409845, 6.165652));    //#49 nose right corner
+	object_pts.push_back(cv::Point3d(2.774015, -2.080775, 5.048531));    //#43 mouth left corner
+	object_pts.push_back(cv::Point3d(-2.774015, -2.080775, 5.048531));   //#39 mouth right corner
+	object_pts.push_back(cv::Point3d(0.000000, -3.116408, 6.097667));    //#45 mouth central bottom corner
+	object_pts.push_back(cv::Point3d(0.000000, -7.415691, 4.070434));    //#6 chin corner	
+	return object_pts;
+}
 // Calculating HOG features for given shape
 void featHOG(cv::Mat &img_inp, cv::Mat &shp, cv::Mat &out, int winsize) {
 
@@ -156,10 +181,48 @@ void live() {
 		return;
 	}
 #endif
+	// Variables for head pose estimation
+	// Distortion Coefficient (here it is assumed that camera lens is distortion free.
+	cv::Mat dist_coeffs = cv::Mat::zeros(5, 1, CV_64FC1);
+
+	// 3D model points(world coordinates)
+	std::vector<cv::Point3d> object_pts = get_3D_model_points();
+
+	// 2D image points(image coordinates), 
+	std::vector<cv::Point2d> image_pts;
+
+	// Required matrices to store results
+	cv::Mat rotation_vec, translation_vec;          //3 x 1
+	cv::Mat rotation_mat;                           //3 x 3 R
+
+	cv::Mat pose_mat = cv::Mat(3, 4, CV_64FC1);     //3 x 4 R | T
+	cv::Mat euler_angle = cv::Mat(3, 1, CV_64FC1);
+
+	// 3D world coordinate axis reprojections to verify resulting pose and drawing pose on image
+	std::vector<cv::Point3d> reprojectsrc;
+	reprojectsrc.push_back(cv::Point3d(0.0, 0.0, 0.0));
+	reprojectsrc.push_back(cv::Point3d(-5.0, 0.0, 0.0));
+	reprojectsrc.push_back(cv::Point3d(0.0, 5.0, 0.0));
+	reprojectsrc.push_back(cv::Point3d(0.0, 0.0, 5.0));
+
+	// Reprojected 2D points
+	std::vector<cv::Point2d> reprojectdst;
+	reprojectdst.resize(8);
+
+	// Temp buffer for some arguments of function decomposeProjectionMatrix()
+	cv::Mat out_intrinsics = cv::Mat(3, 3, CV_64FC1);
+	cv::Mat out_rotation = cv::Mat(3, 3, CV_64FC1);
+	cv::Mat out_translation = cv::Mat(3, 1, CV_64FC1);
+
+	// Displayin text on image
+	ostringstream outtext;
+
+	// Check fps
 	LARGE_INTEGER start1, end1, freq1;
 	QueryPerformanceFrequency(&freq1);
-
 	int frate1;	
+
+	// Some other variables
 	float scale;
 	cv::Mat features, feat;
 	int width, height;
@@ -235,6 +298,69 @@ void live() {
 			for (size_t j = 0; j < init_shape_org.rows; ++j) {
 				cv::circle(I, cv::Point(init_shape_org.at<float>(j, 0), init_shape_org.at<float>(j, 1)), 2, cv::Scalar(10, 255, 10), -1, 8, 0);
 			}
+			
+			// Calculate head pose
+			// Desired size
+			int desired_cols = I.cols, desired_rows = I.rows;
+
+			// Intrinsic params
+			cv::Mat cam_matrix = get_camera_matrix(desired_cols, cv::Point2f(desired_cols / 2, desired_rows / 2));
+
+			// 2D reference image points, 
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(17, 0), init_shape_org.at<float>(17, 1))); //#17 left brow left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(21, 0), init_shape_org.at<float>(21, 1))); //#21 left brow right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(22, 0), init_shape_org.at<float>(22, 1))); //#22 right brow left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(26, 0), init_shape_org.at<float>(26, 1))); //#26 right brow right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(36, 0), init_shape_org.at<float>(36, 1))); //#36 left eye left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(39, 0), init_shape_org.at<float>(39, 1))); //#39 left eye right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(42, 0), init_shape_org.at<float>(42, 1))); //#42 right eye left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(45, 0), init_shape_org.at<float>(45, 1))); //#45 right eye right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(31, 0), init_shape_org.at<float>(31, 1))); //#31 nose left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(35, 0), init_shape_org.at<float>(35, 1))); //#35 nose right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(48, 0), init_shape_org.at<float>(48, 1))); //#48 mouth left corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(54, 0), init_shape_org.at<float>(54, 1))); //#54 mouth right corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(57, 0), init_shape_org.at<float>(57, 1))); //#57 mouth central bottom corner
+			image_pts.push_back(cv::Point2d(init_shape_org.at<float>(8, 0), init_shape_org.at<float>(8, 1)));   //#8 chin corner
+
+			// Calculate pose
+			cv::solvePnP(object_pts, image_pts, cam_matrix, dist_coeffs, rotation_vec, translation_vec);
+
+			// Reproject
+			cv::projectPoints(reprojectsrc, rotation_vec, translation_vec, cam_matrix, dist_coeffs, reprojectdst);
+
+			// Calculate euler angles
+			cv::Rodrigues(rotation_vec, rotation_mat);
+			cv::hconcat(rotation_mat, translation_vec, pose_mat);
+			cv::decomposeProjectionMatrix(pose_mat, out_intrinsics, out_rotation, out_translation, cv::noArray(), cv::noArray(), cv::noArray(), euler_angle);
+
+			// Roll, Yaw and Pitch
+			double roll = euler_angle.at<double>(2), yaw = euler_angle.at<double>(1), pitch = euler_angle.at<double>(0);
+
+			// Print on image           
+			outtext << "Roll: " << setprecision(3) << euler_angle.at<double>(2);
+			cv::putText(I, outtext.str(), cv::Point(10, 40), cv::FONT_HERSHEY_SIMPLEX, 0.75, cv::Scalar(200, 200, 200));
+			outtext.str("");
+			outtext << "Yaw: " << setprecision(3) << euler_angle.at<double>(1);
+			cv::putText(I, outtext.str(), cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.75, cv::Scalar(200, 200, 200));
+			outtext.str("");
+			outtext << "Pitch: " << setprecision(3) << euler_angle.at<double>(0);
+			cv::putText(I, outtext.str(), cv::Point(10, 80), cv::FONT_HERSHEY_SIMPLEX, 0.75, cv::Scalar(200, 200, 200));
+			outtext.str("");
+
+			image_pts.clear();
+
+			// Draw pose on image
+			cv::Point pt;
+			pt.x = desired_cols - reprojectdst[0].x - 100;
+			pt.y = reprojectdst[0].y - 100;
+			reprojectdst[0].x = desired_cols - 100; reprojectdst[0].y = 100;			
+			reprojectdst[1].x += pt.x; reprojectdst[1].y -= pt.y;
+			reprojectdst[2].x += pt.x; reprojectdst[2].y -= pt.y;
+			reprojectdst[3].x += pt.x; reprojectdst[3].y -= pt.y;
+
+			cv::line(I, reprojectdst[0], reprojectdst[1], cv::Scalar(255, 0, 0), 2, 8, 0);
+			cv::line(I, reprojectdst[0], reprojectdst[2], cv::Scalar(0, 0, 255), 2, 8, 0);
+			cv::line(I, reprojectdst[0], reprojectdst[3], cv::Scalar(0, 255, 0), 2, 8, 0);
 		}
 		
 #ifdef write_video
