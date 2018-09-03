@@ -17,6 +17,3 @@
 
 ## Reference: 
 * [1] "Supervised Descent Method and its Applications to Face Alignment", Xuehan Xiong, Fernando De la Torre
-* [2] "Incremental Face Alignment in the Wild", Akshay Asthana, Stefanos Zafeiriou, Shiyang Cheng, Maja Pantic
-
-
